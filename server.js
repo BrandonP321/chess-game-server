@@ -36,7 +36,7 @@ io.on('connection', socket => {
             // if nothing is returned yet, return true
             return true
         }
-        
+
         let roomName;
         // keep creating a new room name until a name not already being used is made
         do {
@@ -48,10 +48,11 @@ io.on('connection', socket => {
             name: roomName,
             whitePlayer: '',
             blackPlayer: '',
+            teamUp: 'none',
             watchers: []
         }
         console.log(roomObj)
-        
+
         rooms.push(roomObj)
         console.log(rooms)
 
@@ -109,7 +110,7 @@ io.of('/game').on('connection', socket => {
                 break;
             }
         }
-        
+
         // if no room exists, exit function and tell user something has happened
         if (!roomIndex && roomIndex !== 0) {
             console.log('no room exists')
@@ -135,6 +136,17 @@ io.of('/game').on('connection', socket => {
             socket.emit('usernameCreated', 'watcher')
             // tell rest of room that a new player has joined
             io.of(roomName).emit('newPlayerJoined', 'watcher')
+        }
+    })
+
+    socket.on('beginGame', data => {
+        const roomIndex = getRoomIndex(roomName)
+        // if the room has a player on both teams, begin the game
+        if (rooms[roomIndex].whitePlayer && rooms[roomIndex].blackPlayer) {
+            io.of('/game').to(roomName).emit('startGame', 'white')
+        } else {
+            // if both teams don't have a player, don't let game start yet
+            io.of('/game').to(roomName).emit('notEnoughPlayersToStart')
         }
     })
 
@@ -164,4 +176,13 @@ function generateRoomName() {
     }
 
     return str
+}
+
+function getRoomIndex(room) {
+    let roomIndex;
+    for (let i = 0; i < rooms.length; i++) {
+        if (rooms[i].name === room) {
+            return i
+        }
+    }
 }
