@@ -16,7 +16,7 @@ const io = socketio(server, {
     }
 })
 
-// array of all currently existing rooms
+// array of all currently existing rooms 
 const rooms = []
 
 io.on('connection', socket => {
@@ -46,8 +46,8 @@ io.on('connection', socket => {
         // create new object for the room
         const roomObj = {
             name: roomName,
-            playerOne: '',
-            playerTwo: '',
+            whitePlayer: '',
+            blackPlayer: '',
             watchers: []
         }
         console.log(roomObj)
@@ -79,6 +79,8 @@ io.on('connection', socket => {
 
 // name space for a game
 io.of('/game').on('connection', socket => {
+    console.log('user connected to game socket name space')
+
     let roomName;
 
     // when user joins a game, add them to a room
@@ -90,9 +92,60 @@ io.of('/game').on('connection', socket => {
                 // if id's match, join socket to room and break loop
                 roomName = room.name
                 socket.join(roomName)
+                console.log('user joined room ' + room.name)
                 break
             }
         }
+    })
+
+    socket.on('createUsername', username => {
+        console.log(roomName)
+        // using the already created room id, add the players username to that room in the rooms array
+        let roomIndex;
+        for (let i = 0; i < rooms.length; i++) {
+            const room = rooms[i]
+            if (room.name === roomName) {
+                roomIndex = i
+                break;
+            }
+        }
+        
+        // if no room exists, exit function and tell user something has happened
+        if (!roomIndex && roomIndex !== 0) {
+            console.log('no room exists')
+            return
+        }
+        console.log('room exists')
+
+        if (!rooms[roomIndex].whitePlayer) {
+            // if no user at whitePlayer spot, make the new user player one
+            rooms[roomIndex].whitePlayer = username
+            socket.emit('usernameCreated', 'white')
+            // tell rest of room that a new player has joined
+            io.of(roomName).emit('newPlayerJoined', 'watcher')
+        } else if (!rooms[roomIndex].blackPlayer) {
+            // if there is a white user but no black user, make new user black player
+            rooms[roomIndex].blackPlayer = username
+            socket.emit('usernameCreated', 'black')
+            // tell rest of room that a new player has joined
+            io.of(roomName).emit('newPlayerJoined', 'black')
+        } else {
+            // if a player is currently in a black and white player position, add new user to watchers array
+            rooms[roomIndex].watchers.push(username)
+            socket.emit('usernameCreated', 'watcher')
+            // tell rest of room that a new player has joined
+            io.of(roomName).emit('newPlayerJoined', 'watcher')
+        }
+    })
+
+    socket.on('userMovedPiece', move => {
+        console.log('user move received')
+        // emit move to all connected users except the sender
+        socket.broadcast.to(roomName).emit('opponentMove', move)
+    })
+
+    socket.on('disconnect', () => {
+        console.log('user disconnected from game name space')
     })
 })
 
