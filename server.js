@@ -113,6 +113,7 @@ io.of('/game').on('connection', socket => {
 
         // if no room exists, exit function and tell user something has happened
         if (!roomIndex && roomIndex !== 0) {
+            console.log(roomName, rooms)
             console.log('no room exists')
             return
         }
