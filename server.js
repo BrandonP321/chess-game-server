@@ -100,7 +100,7 @@ io.of('/game').on('connection', socket => {
     })
 
     socket.on('createUsername', username => {
-        console.log(roomName)
+        console.log(roomId)
         // using the already created room id, add the players username to that room in the rooms array
         let roomIndex;
         for (let i = 0; i < rooms.length; i++) {
