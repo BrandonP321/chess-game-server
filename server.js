@@ -49,7 +49,8 @@ io.on('connection', socket => {
             whitePlayer: '',
             blackPlayer: '',
             teamUp: 'none',
-            watchers: []
+            watchers: [],
+            pieces: []
         }
         console.log(roomObj)
 
@@ -94,6 +95,8 @@ io.of('/game').on('connection', socket => {
                 roomName = room.name
                 socket.join(roomName)
                 console.log('user joined room ' + room.name)
+                // send room info back to client
+                socket.emit('roomJoined', room)
                 break
             }
         }
@@ -121,21 +124,21 @@ io.of('/game').on('connection', socket => {
         if (!rooms[roomIndex].whitePlayer) {
             // if no user at whitePlayer spot, make the new user player one
             rooms[roomIndex].whitePlayer = username
-            socket.emit('usernameCreated', 'white')
+            socket.emit('usernameCreated', { color: 'white', username: username })
             // tell rest of room that a new player has joined
-            io.of(roomName).emit('newPlayerJoined', 'watcher')
+            io.of(roomName).emit('newPlayerJoined', { color: 'white', username: username })
         } else if (!rooms[roomIndex].blackPlayer) {
             // if there is a white user but no black user, make new user black player
             rooms[roomIndex].blackPlayer = username
-            socket.emit('usernameCreated', 'black')
+            socket.emit('usernameCreated', { color: 'black', username: username })
             // tell rest of room that a new player has joined
             io.of(roomName).emit('newPlayerJoined', 'black')
         } else {
             // if a player is currently in a black and white player position, add new user to watchers array
             rooms[roomIndex].watchers.push(username)
-            socket.emit('usernameCreated', 'watcher')
+            socket.emit('usernameCreated', { color: 'watcher', username: username })
             // tell rest of room that a new player has joined
-            io.of(roomName).emit('newPlayerJoined', 'watcher')
+            io.of(roomName).emit('newPlayerJoined', { color: 'watcher', username: username })
         }
     })
 
@@ -154,6 +157,37 @@ io.of('/game').on('connection', socket => {
         console.log('user move received')
         // emit move to all connected users except the sender
         socket.broadcast.to(roomName).emit('opponentMove', move)
+    })
+
+    // update pieces stored on server when the array changes on the front end
+    socket.on('piecesUpdate', data => {
+        const { pieces, teamUp} = data
+        const roomIndex = getRoomIndex(roomName)
+        rooms[roomIndex].pieces = pieces
+        rooms[roomIndex].teamUp = teamUp
+    })
+
+    // sent when user leave's site, to remove them from the room's info obj
+    socket.on('userLeaving', user => {
+        let roomIndex = getRoomIndex(roomName)
+        const { team, username } = user
+        console.log(user)
+        // remove user from room obj
+        switch (team) {
+            case 'white':
+                rooms[roomIndex].whitePlayer = ''
+                break
+            case 'black':
+                rooms[roomIndex].blackPlayer = ''
+                break
+            case 'watcher':
+                rooms[roomIndex].watchers = rooms[roomIndex].watchers.filter(watcher => watcher !== user.username)
+                break
+        }
+        console.log('\n***USER LEFT***\n')
+        // emit to all other connected users that a user has left
+        io.of('/game').to(roomName).emit('userLeft', user)
+
     })
 
     socket.on('disconnect', () => {
