@@ -49,6 +49,8 @@ io.on('connection', socket => {
             whitePlayer: '',
             blackPlayer: '',
             teamUp: 'none',
+            whitePiecesTaken: [],
+            blackPiecesTaken: [],
             watchers: [],
             pieces: []
         }
@@ -144,7 +146,7 @@ io.of('/game').on('connection', socket => {
 
     socket.on('beginGame', data => {
         const roomIndex = getRoomIndex(roomName)
-        // if the room has a player on both teams, begin the game
+        // if the room has a player on both teams, set white as team up and begin the game
         if (rooms[roomIndex].whitePlayer && rooms[roomIndex].blackPlayer) {
             io.of('/game').to(roomName).emit('startGame', 'white')
         } else {
@@ -159,9 +161,19 @@ io.of('/game').on('connection', socket => {
         socket.broadcast.to(roomName).emit('opponentMove', move)
     })
 
+    socket.on('pieceTaken', piece => {
+        const roomIndex = getRoomIndex(roomName)
+        // based on piece's color, push it to the appropriate array
+        if (piece.color === 'white') {
+            rooms[roomIndex].whitePiecesTaken.push(piece.pieceType)
+        } else if (piece.color === 'black') {
+            rooms[roomIndex].blackPiecesTaken.push(piece.pieceType)
+        }
+    })
+
     // update pieces stored on server when the array changes on the front end
     socket.on('piecesUpdate', data => {
-        const { pieces, teamUp} = data
+        const { pieces, teamUp } = data
         const roomIndex = getRoomIndex(roomName)
         rooms[roomIndex].pieces = pieces
         rooms[roomIndex].teamUp = teamUp
