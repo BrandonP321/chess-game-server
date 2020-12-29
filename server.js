@@ -52,6 +52,7 @@ io.on('connection', socket => {
             whitePiecesTaken: [],
             blackPiecesTaken: [],
             watchers: [],
+            gameStatus: false,
             pieces: []
         }
         console.log(roomObj)
@@ -106,42 +107,32 @@ io.of('/game').on('connection', socket => {
 
     socket.on('createUsername', username => {
         // using the already created room id, add the players username to that room in the rooms array
-        let roomIndex;
-        for (let i = 0; i < rooms.length; i++) {
-            const room = rooms[i]
-            if (room.name === roomName) {
-                roomIndex = i
-                break;
-            }
-        }
+        let roomIndex = getRoomIndex(roomName)
 
         // if no room exists, exit function and tell user something has happened
         if (!roomIndex && roomIndex !== 0) {
-            console.log(roomName, rooms)
             console.log('no room exists')
             return
         }
-        console.log('room exists')
+
+        let color;
 
         if (!rooms[roomIndex].whitePlayer) {
             // if no user at whitePlayer spot, make the new user player one
             rooms[roomIndex].whitePlayer = username
-            socket.emit('usernameCreated', { color: 'white', username: username })
-            // tell rest of room that a new player has joined
-            io.of(roomName).emit('newPlayerJoined', { color: 'white', username: username })
+            color = 'white'
         } else if (!rooms[roomIndex].blackPlayer) {
             // if there is a white user but no black user, make new user black player
             rooms[roomIndex].blackPlayer = username
-            socket.emit('usernameCreated', { color: 'black', username: username })
-            // tell rest of room that a new player has joined
-            io.of(roomName).emit('newPlayerJoined', 'black')
+            color = 'black'
         } else {
             // if a player is currently in a black and white player position, add new user to watchers array
             rooms[roomIndex].watchers.push(username)
-            socket.emit('usernameCreated', { color: 'watcher', username: username })
-            // tell rest of room that a new player has joined
-            io.of(roomName).emit('newPlayerJoined', { color: 'watcher', username: username })
+            color = 'watcher'
         }
+
+        socket.emit('usernameCreated', { color: color, username: username })
+        socket.broadcast.to(roomName).emit('newPlayerJoined', {color: color, username: username})
     })
 
     socket.on('beginGame', data => {
@@ -153,6 +144,18 @@ io.of('/game').on('connection', socket => {
             // if both teams don't have a player, don't let game start yet
             io.of('/game').to(roomName).emit('notEnoughPlayersToStart')
         }
+    })
+
+    socket.on('gameStatusChange', status => {
+        let roomIndex = getRoomIndex(roomName)
+        console.log(status)
+        // update status boolean
+        rooms[roomIndex].gameStatus = status
+    })
+
+    socket.on('updateTeamUp', team => {
+        let roomIndex = getRoomIndex(roomName)
+        rooms[i].teamUp = team
     })
 
     socket.on('userMovedPiece', move => {
@@ -171,6 +174,23 @@ io.of('/game').on('connection', socket => {
         }
     })
 
+    socket.on('kingTaken', team => {
+        // send to all in room the winning team
+        io.of('/game').to(roomName).emit('gameOver', team)
+    })
+
+    socket.on('startNewGame', () => {
+        // reset values in rooms Obj
+        const roomIndex = getRoomIndex(roomName)
+        const room = rooms[roomIndex]
+        room.teamUp = 'white';
+        room.whitePiecesTaken = []
+        room.blackPiecesTaken = []
+        room.pieces = []
+        // send message to all connected users to reset their boards
+        io.of('/game').to(roomName).emit('resetGame')
+    })
+
     // update pieces stored on server when the array changes on the front end
     socket.on('piecesUpdate', data => {
         const { pieces, teamUp } = data
@@ -183,23 +203,29 @@ io.of('/game').on('connection', socket => {
     socket.on('userLeaving', user => {
         let roomIndex = getRoomIndex(roomName)
         const { team, username } = user
-        console.log(user)
+        // get spectator next in line to take over for the user
+        const nextInLine = rooms[roomIndex].watchers.length > 0 ? rooms[roomIndex].watchers[0] : ''
         // remove user from room obj
         switch (team) {
             case 'white':
-                rooms[roomIndex].whitePlayer = ''
+                rooms[roomIndex].whitePlayer = nextInLine
                 break
             case 'black':
-                rooms[roomIndex].blackPlayer = ''
+                rooms[roomIndex].blackPlayer = nextInLine
                 break
             case 'watcher':
                 rooms[roomIndex].watchers = rooms[roomIndex].watchers.filter(watcher => watcher !== user.username)
                 break
         }
-        console.log('\n***USER LEFT***\n')
         // emit to all other connected users that a user has left
         io.of('/game').to(roomName).emit('userLeft', user)
-
+        // if there is a spectator to take over, send that updated room info to users
+        if (nextInLine) {
+            io.of('/game').to(roomName).emit('userTakingOver', { team: team, username: nextInLine })
+        } else {
+            // else tell client that a second user is needed to start the game
+            io.of('/game').to(roomName).emit('waitingForUser')
+        }
     })
 
     socket.on('disconnect', () => {
