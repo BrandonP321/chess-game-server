@@ -155,7 +155,7 @@ io.of('/game').on('connection', socket => {
 
     socket.on('updateTeamUp', team => {
         let roomIndex = getRoomIndex(roomName)
-        rooms[i].teamUp = team
+        rooms[roomIndex].teamUp = team
     })
 
     socket.on('userMovedPiece', move => {
@@ -222,10 +222,22 @@ io.of('/game').on('connection', socket => {
         // if there is a spectator to take over, send that updated room info to users
         if (nextInLine) {
             io.of('/game').to(roomName).emit('userTakingOver', { team: team, username: nextInLine })
+            // remove next in line player from watchers array
+            rooms[roomIndex].watchers = rooms[roomIndex].watchers.filter(watcher => watcher !== nextInLine)
         } else {
             // else tell client that a second user is needed to start the game
             io.of('/game').to(roomName).emit('waitingForUser')
         }
+    })
+
+    socket.on('resign', user => {
+        // tell all users that a user has resigned
+        io.of('/game').to(roomName).emit('userResigned', user)
+    })
+
+    socket.on('resumeGame', () => {
+        // emit to all other users to resume game
+        socket.broadcast.to(roomName).emit('resumeGame')
     })
 
     socket.on('disconnect', () => {
