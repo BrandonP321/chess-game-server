@@ -240,6 +240,36 @@ io.of('/game').on('connection', socket => {
         socket.broadcast.to(roomName).emit('resumeGame')
     })
 
+    socket.on('userWantsDraw', () => {
+        // when a user wants a draw, emit to rest of room that they want to draw the game
+        socket.broadcast.to(roomName).emit('userWantsDraw')
+    })
+
+    socket.on('userAcceptsDraw', () => {
+        // when a user accepts the draw, send message to room that game is over
+        io.of('/game').to(roomName).emit('gameIsDraw')
+    })
+
+    socket.on('givingSpotToSpectator', players => {
+        const { user, spectator } = players
+        // update room players info obj
+        const roomIndex = getRoomIndex(roomName)
+        // remove specator from spectators array and add user to it
+        const newSpectators = rooms[roomIndex].watchers.filter(watcher => watcher !== spectator)
+        newSpectators.push(user.username)
+        rooms[roomIndex].watchers = newSpectators
+        
+        // based on user's team, assign spectator to that team
+        if (user.team === 'white') {
+            rooms[roomIndex].whitePlayer = spectator
+        } else if (user.team === 'black') {
+            rooms[roomIndex].blackPlayer = spectator
+        }
+        
+        // send info to connected users that players are switching places
+        io.of('/game').to(roomName).emit('playerSpectatorTrade', players)
+    })
+
     socket.on('disconnect', () => {
         console.log('user disconnected from game name space')
     })
