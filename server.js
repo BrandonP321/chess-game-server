@@ -227,6 +227,13 @@ io.of('/game').on('connection', socket => {
                 rooms[roomIndex].watchers = rooms[roomIndex].watchers.filter(watcher => watcher !== user.username)
                 break
         }
+
+        // if there are no users left in the room, remove the room from the array of rooms
+        if (!rooms[roomIndex].whitePlayer && !rooms[roomIndex].blackPlayer && rooms[roomIndex].watchers.length === 0) {
+            rooms.splice(roomIndex, 1)
+            return 
+        }
+
         // emit to all other connected users that a user has left
         io.of('/game').to(roomName).emit('userLeft', user)
         // if there is a spectator to take over, send that updated room info to users
