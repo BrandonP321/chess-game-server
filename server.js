@@ -103,9 +103,11 @@ io.of('/game').on('connection', socket => {
                 console.log('user joined room ' + room.name)
                 // send room info back to client
                 socket.emit('roomJoined', room)
-                break
+                return
             }
         }
+        // if nothing has returned yet, emit to user that room doesn't exist
+        socket.emit('noRoomFound')
     })
 
     socket.on('createUsername', username => {
