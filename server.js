@@ -66,6 +66,9 @@ io.on('connection', socket => {
 
     // when user wants to join an existing room
     socket.on('joinExistingRoom', (roomId) => {
+        // make roomId all lowercase
+        roomId = roomId.toLowerCase()
+
         // check for a room with the same id
         for (let i = 0; i < rooms.length; i++) {
             let room = rooms[i]
@@ -115,6 +118,13 @@ io.of('/game').on('connection', socket => {
             return
         }
 
+        // first make sure no other user has the same username
+        if (rooms[roomIndex].whitePlayer.toLowerCase() === username.toLowerCase() ||
+            rooms[roomIndex].blackPlayer.toLowerCase() === username.toLowerCase() ||
+            rooms[roomIndex].watchers.filter(watcher => watcher.toLowerCase() === username.toLowerCase()).length > 0) {
+                return socket.emit('usernameTaken')
+        }
+
         let color;
 
         if (!rooms[roomIndex].whitePlayer) {
@@ -132,7 +142,7 @@ io.of('/game').on('connection', socket => {
         }
 
         socket.emit('usernameCreated', { color: color, username: username })
-        socket.broadcast.to(roomName).emit('newPlayerJoined', {color: color, username: username})
+        socket.broadcast.to(roomName).emit('newPlayerJoined', { color: color, username: username })
     })
 
     socket.on('beginGame', data => {
@@ -258,14 +268,14 @@ io.of('/game').on('connection', socket => {
         const newSpectators = rooms[roomIndex].watchers.filter(watcher => watcher !== spectator)
         newSpectators.push(user.username)
         rooms[roomIndex].watchers = newSpectators
-        
+
         // based on user's team, assign spectator to that team
         if (user.team === 'white') {
             rooms[roomIndex].whitePlayer = spectator
         } else if (user.team === 'black') {
             rooms[roomIndex].blackPlayer = spectator
         }
-        
+
         // send info to connected users that players are switching places
         io.of('/game').to(roomName).emit('playerSpectatorTrade', players)
     })
