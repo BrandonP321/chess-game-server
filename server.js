@@ -4,7 +4,7 @@ const app = express();
 const socketio = require('socket.io');
 
 require('dotenv').config();
-const PORT = process.env.PORT
+const PORT = process.env.PORT || 8000
 
 const server = app.listen(PORT, () => {
     console.log('server listening on port ' + PORT)
@@ -20,8 +20,6 @@ const io = socketio(server, {
 const rooms = []
 
 io.on('connection', socket => {
-    console.log('user connected, socket: ' + socket.id)
-
     socket.on('createNewRoom', () => {
         // function to check if new room name is unique
         function roomNameCheck(name) {
@@ -53,7 +51,8 @@ io.on('connection', socket => {
             blackPiecesTaken: [],
             watchers: [],
             gameStatus: false,
-            pieces: []
+            pieces: [],
+            playersJoining: 0
         }
         console.log(roomObj)
 
@@ -103,6 +102,9 @@ io.of('/game').on('connection', socket => {
                 console.log('user joined room ' + room.name)
                 // send room info back to client
                 socket.emit('roomJoined', room)
+
+                // increment number of players joining in room obj
+                room.playersJoining = room.playersJoining + 1
                 return
             }
         }
@@ -111,6 +113,7 @@ io.of('/game').on('connection', socket => {
     })
 
     socket.on('createUsername', username => {
+        console.log('creating username: ' + username)
         // using the already created room id, add the players username to that room in the rooms array
         let roomIndex = getRoomIndex(roomName)
 
@@ -128,7 +131,7 @@ io.of('/game').on('connection', socket => {
         }
 
         let color;
-
+        console.log(rooms[roomIndex].whitePlayer, rooms[roomIndex].blackPlayer, rooms[roomIndex].watchers)
         if (!rooms[roomIndex].whitePlayer) {
             // if no user at whitePlayer spot, make the new user player one
             rooms[roomIndex].whitePlayer = username
@@ -142,13 +145,18 @@ io.of('/game').on('connection', socket => {
             rooms[roomIndex].watchers.push(username)
             color = 'watcher'
         }
+        console.log('your color is', color)
 
         socket.emit('usernameCreated', { color: color, username: username })
         socket.broadcast.to(roomName).emit('newPlayerJoined', { color: color, username: username })
+
+        // decrement number of players joining in room obj
+        rooms[roomIndex].playersJoining = rooms[roomIndex].playersJoining - 1
     })
 
     socket.on('beginGame', data => {
         const roomIndex = getRoomIndex(roomName)
+        console.log(rooms[roomIndex])
         // if the room has a player on both teams, set white as team up and begin the game
         if (rooms[roomIndex].whitePlayer && rooms[roomIndex].blackPlayer) {
             io.of('/game').to(roomName).emit('startGame', 'white')
@@ -195,6 +203,7 @@ io.of('/game').on('connection', socket => {
         // reset values in rooms Obj
         const roomIndex = getRoomIndex(roomName)
         const room = rooms[roomIndex]
+        console.log('starting new game', room)
         room.teamUp = 'white';
         room.whitePiecesTaken = []
         room.blackPiecesTaken = []
@@ -212,11 +221,13 @@ io.of('/game').on('connection', socket => {
     })
 
     // sent when user leave's site, to remove them from the room's info obj
-    socket.on('userLeaving', user => {
+    socket.on('leaveGame', user => {
+        const { team } = user
+        
         let roomIndex = getRoomIndex(roomName)
-        const { team, username } = user
         // get spectator next in line to take over for the user
         const nextInLine = rooms[roomIndex].watchers.length > 0 ? rooms[roomIndex].watchers[0] : ''
+        console.log('next in line: ' + nextInLine)
         // remove user from room obj
         switch (team) {
             case 'white':
@@ -231,7 +242,7 @@ io.of('/game').on('connection', socket => {
         }
 
         // if there are no users left in the room, remove the room from the array of rooms
-        if (!rooms[roomIndex].whitePlayer && !rooms[roomIndex].blackPlayer && rooms[roomIndex].watchers.length === 0) {
+        if (!rooms[roomIndex].whitePlayer && !rooms[roomIndex].blackPlayer && rooms[roomIndex].watchers.length === 0 && rooms[roomIndex].playersJoining <= 0) {
             rooms.splice(roomIndex, 1)
             return 
         }
